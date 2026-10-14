@@ -1,41 +1,49 @@
-# WEEK 14: BUILDING A SIMPLE LLM AGENT
-# Install:
-# pip install langchain langchain-openai
- 
-from langchain_openai import ChatOpenAI
+# 1. Install dependencies
+!pip install -q langchain langchain-community langchain-huggingface langgraph transformers accelerate
+
 from langchain_core.tools import tool
-from langchain.agents import create_agent
- 
+from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
+from transformers import pipeline
+from langgraph.prebuilt import create_react_agent
+
 print("===== WEEK 14: SIMPLE LLM AGENT =====")
- 
+
+# 2. Define the tool
 @tool
 def calculator(expression: str) -> str:
-    """Calculate a basic mathematical expression."""
+    """Calculate a basic mathematical expression. Input should be a valid Python math string like '245 * 786'."""
     try:
-        result = eval(expression)
+        # Simple eval for safe arithmetic operations
+        result = eval(expression, {"__builtins__": {}})
         return str(result)
     except Exception as e:
         return f"Error: {e}"
- 
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    api_key="YOUR_OPENAI_API_KEY"
+
+# 3. Setup a free local LLM that supports tool calling
+pipe = pipeline(
+    "text-generation",
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    max_new_tokens=256,
+    return_full_text=False
 )
- 
-agent = create_agent(
+
+hf_llm = HuggingFacePipeline(pipeline=pipe)
+llm = ChatHuggingFace(llm=hf_llm)
+
+# 4. Create the ReAct agent
+tools = [calculator]
+agent = create_react_agent(
     model=llm,
-    tools=[calculator],
-    system_prompt="""
-    You are a helpful AI assistant.
-    Use the calculator tool whenever a mathematical calculation is required.
-    """
+    tools=tools,
+    prompt="You are a helpful AI assistant. Use the calculator tool whenever a mathematical calculation is required."
 )
- 
+
 question = "What is 245 multiplied by 786?"
- 
+
 print("\nUser Question:")
 print(question)
- 
+
+# 5. Invoke the agent
 try:
     response = agent.invoke(
         {
@@ -47,9 +55,9 @@ try:
             ]
         }
     )
- 
+
     print("\n--- AGENT RESPONSE ---")
-    print(response["messages"][-1].content)
- 
+    print(response["messages"][-1].content.strip())
+
 except Exception as e:
     print("\nError:", e)
